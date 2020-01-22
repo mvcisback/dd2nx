@@ -1,8 +1,8 @@
 from typing import Hashable, List, Set, TypeVar, Optional
 
 import attr
+import dd
 import networkx as nx
-
 
 Node = TypeVar("Node")
 
@@ -12,7 +12,12 @@ def leaf(node: Node) -> bool:
 
 
 def node_name(node):
-    return node.var, abs(int(node))
+    idx = int(node)
+    if isinstance(node, dd.autoref.Function):
+        idx = abs(idx)
+    else:
+        idx &= -1 << 1
+    return node.var, idx
 
 
 @attr.s(repr=False)
