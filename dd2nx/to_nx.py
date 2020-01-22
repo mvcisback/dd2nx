@@ -22,8 +22,8 @@ def node_name(node):
 
 @attr.s(repr=False)
 class Queue:
-    _visited: Set[Hashable] = set()
-    _stack: List[Node] = []
+    _visited: Set[Hashable] = attr.ib(factory=set)
+    _stack: List[Node] = attr.ib(factory=list)
 
     def visited(self, node) -> bool:
         return node_name(node) in self._visited
@@ -102,4 +102,4 @@ def to_nx(bexpr, pydot=False):
         queue.push_unvisited_children(node)
         add_node_to_graph(g, node, pydot)
 
-    return g, bexpr.negated
+    return g
