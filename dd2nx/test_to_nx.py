@@ -22,6 +22,6 @@ def test_to_nx():
     x, y, z, w = map(manager.var, "xyzw")
     bexpr = reduce(xor, [x, y, z, w])
 
-    g, negated = to_nx(bexpr, pydot=True)
+    g = to_nx(bexpr, pydot=True)
     assert len(g.nodes) == 4 + 2
     assert len(g.edges) == 2*4 + 1

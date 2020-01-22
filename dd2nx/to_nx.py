@@ -1,36 +1,41 @@
-from typing import Hashable, List, Set, TypeVar, Optional
+from functools import partial
+from typing import Hashable, List, Set, TypeVar, Optional, Callable
 
 import attr
 import dd
 import networkx as nx
 
 Node = TypeVar("Node")
+BDD = TypeVar("BDD")
 
 
 def leaf(node: Node) -> bool:
     return node.var is None
 
 
-def node_name(node):
+def node_name(node, merge_negated=True):
     idx = int(node)
-    if isinstance(node, dd.autoref.Function):
-        idx = abs(idx)
-    else:
-        idx &= -1 << 1
+    if merge_negated:
+        if isinstance(node, dd.autoref.Function):
+            idx = abs(idx)
+        else:
+            idx &= -1 << 1
+
     return node.var, idx
 
 
-@attr.s(repr=False)
+@attr.s(repr=False, auto_attribs=True)
 class Queue:
+    node_name: Callable[[Node], Hashable] = node_name
     _visited: Set[Hashable] = attr.ib(factory=set)
     _stack: List[Node] = attr.ib(factory=list)
 
     def visited(self, node) -> bool:
-        return node_name(node) in self._visited
+        return self.node_name(node) in self._visited
 
     def push(self, node: Node):
         if not self.visited(node):
-            self._visited.add(node_name(node))
+            self._visited.add(self.node_name(node))
             self._stack.append(node)
 
     def pop(self) -> Optional[Node]:
@@ -55,50 +60,59 @@ class Queue:
         return f"Visited: {self._visited}\nStack: {self._stack}"
 
 
-def add_node_to_graph(g, node, pydot=False):
-    if leaf(node):
-        return
+@attr.s(auto_attribs=True)
+class Graph:
+    g: nx.MultiDiGraph = attr.ib(factory=nx.MultiDiGraph)
+    node_name: Callable[[Node], Hashable] = node_name
+    pydot: bool = False
 
-    curr_name = node_name(node)
+    def add(self, node: Node):
+        if leaf(node):
+            return
 
-    g.add_node(curr_name, var=node.var, lvl=node.level)
+        curr_name = self.node_name(node)
 
-    for child, val in [(node.low, 0), (node.high, 1)]:
-        add_edge(g, curr_name, child, decision=val, pydot=pydot)
+        self.g.add_node(curr_name, var=node.var, lvl=node.level)
+
+        for child, val in [(node.low, 0), (node.high, 1)]:
+            self.add_edge(curr_name, child, decision=val)
+
+    def add_edge(self, curr_name, child, decision=None):
+        payload = {"decision": decision, "negated": child.negated}
+        if self.pydot:
+            if decision is None:
+                decision = True
+            payload["style"] = "solid" if decision else "dashed"
+            payload["arrowhead"] = "dot" if child.negated else "normal"
+
+        self.g.add_edge(curr_name, node_name(child), **payload)
 
 
-def add_edge(g, curr_name, child, decision=None, pydot=False):
-    payload = {"decision": decision, "negated": child.negated}
-    if pydot:
-        if decision is None:
-            decision = True
-        payload["style"] = "solid" if decision else "dashed"
-        payload["arrowhead"] = "dot" if child.negated else "normal"
-
-    g.add_edge(curr_name, node_name(child), **payload)
-
-
-def to_nx(bexpr, pydot=False):
+def to_nx(bexpr, pydot=False, merge_negated=True):
     """Convert BDD to `networkx.MultiDiGraph`.
     The resulting graph has:
       - nodes labeled with:
-        - `level`: `int` from -1 to depth of the bdd, where
-           -1 is a dummy start node.
+        - `level`: `int` from 0 to depth of the bdd.
         - `var`: `str` representing which variable this corresponds
            to.
       - edges labeled with:
         - `value`: `False` for low/"else", `True` for high/"then"
         - `negated`: `True` if target node is negated
+      - A dummy initial node called "<START>". The edge from this
+        node to the first decision indicates if the entire BDD
+        should be negated.
     """
-    g = nx.MultiDiGraph()
-    g.add_node("<START>", var=None, level=-1)
-    add_edge(g, "<START>", bexpr, pydot)
-    queue = Queue()
+    _node_name = partial(node_name, merge_negated=merge_negated)
+    graph = Graph(pydot=pydot, node_name=_node_name)
+
+    queue = Queue(node_name=_node_name)
     queue.push(bexpr)
 
     while not queue.empty:
         node = queue.pop()
         queue.push_unvisited_children(node)
-        add_node_to_graph(g, node, pydot)
+        graph.add(node)
 
-    return g
+    # Add dummy node to make algorithms easier.
+    graph.add_edge("<START>", bexpr)
+    return graph.g
