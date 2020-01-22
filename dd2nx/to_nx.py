@@ -93,7 +93,6 @@ def to_nx(bexpr, pydot=False):
     g = nx.MultiDiGraph()
     g.add_node("<START>", var=None, level=-1)
     add_edge(g, "<START>", bexpr, pydot)
-
     queue = Queue()
     queue.push(bexpr)
 
