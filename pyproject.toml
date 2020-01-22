@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dd2nx"
-version = "0.1.2"
+version = "0.1.3"
 description = "Python library for converting the dd package's BDD to Multigraph in networkx."
 readme="README.md"
 repository = "https://github.com/mvcisback/dd2nx"
